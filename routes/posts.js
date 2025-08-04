@@ -3,14 +3,18 @@ import {
     getPosts, getPost, getPostsTerm, createPost,
     changePost, updatePost, deletePost
 } from '../controllers/posts.js';
+import commentsRouter from './comments.js';
 
 const router = express.Router();
 
-router.get('/', (req, res) => req.query.term ? getPostsTerm(req, res) : getPosts(req, res));
-router.get('/:id', getPost);
+router.get('/', (req, res) => req.query.term ?
+getPostsTerm(req, res) : getPosts(req, res));
+router.get('/:postID', getPost);
 router.post('/', createPost);
-router.put('/:id', changePost);
-router.patch('/:id', updatePost);
-router.delete('/:id', deletePost);
+router.put('/:postID', changePost);
+router.patch('/:postID', updatePost);
+router.delete('/:postID', deletePost);
+
+router.use('/:postID/comments', commentsRouter);
 
 export default router;
