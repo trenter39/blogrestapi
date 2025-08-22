@@ -1,4 +1,5 @@
 import db from '../db.js';
+import { handleError } from '../utils/errorHandler.js';
 
 export async function getComment(req, res) {
     try {
@@ -6,7 +7,7 @@ export async function getComment(req, res) {
         const commentID = parseInt(req.params.commentID);
         if (isNaN(postID) || isNaN(commentID)) {
             return res.status(400)
-                .send("Bad request. Invalid ID.");
+                .json({ error: "Bad request. Invalid ID." });
         }
         const sql = `select * from comments
         where postID = ? and id = ?`;
@@ -14,13 +15,11 @@ export async function getComment(req, res) {
             .query(sql, [postID, commentID]);
         if (result.length === 0) {
             return res.status(404)
-                .send("Comment wasn't found!");
+                .json({ error: "Comment wasn't found!" });
         }
-        return res.status(200).json(result);
+        return res.status(200).json(result[0]);
     } catch (err) {
-        console.log(err);
-        return res.status(500)
-            .send("Error retrieving comment!");
+        return handleError(res, err);
     }
 }
 
@@ -29,20 +28,19 @@ export async function getComments(req, res) {
         const postID = parseInt(req.params.postID);
         if (isNaN(postID)) {
             return res.status(400)
-                .send("Bad request. Invalid ID.");
+                .json({ error: "Bad request. Invalid ID." });
         }
         const sql = `select * from comments
         where postID = ?`;
         const [result] = await db.query(sql, [postID]);
         if (result.length === 0) {
-            return res.status(404)
-                .send("Comments for this post weren't found!");
+            return res.status(404).json({
+                error: "Comments for this post weren't found!"
+            });
         }
         return res.status(200).json(result);
     } catch (err) {
-        console.log(err);
-        return res.status(500)
-            .send("Error retrieving comments!");
+        return handleError(res, err);
     }
 }
 
@@ -51,41 +49,37 @@ export async function createComment(req, res) {
         const postID = parseInt(req.params.postID);
         if (isNaN(postID)) {
             return res.status(400)
-                .send("Bad request. Invalid ID.");
+                .json({ error: "Bad request. Invalid ID." });
         }
         const { author, content } = req.body;
         if (!author || !content) {
-            return res.status(400)
-                .send("Missing fields or invalid format!");
+            return res.status(400).json(
+                { error: "Missing fields or invalid format!" });
         }
         const checksql = `select 1 from posts
         where id = ?`;
         const [checkResult] = await db
             .query(checksql, [postID]);
         if (checkResult.length === 0) {
-            return res.status(404).send("Post wasn't found!");
+            return res.status(404)
+                .json({ error: "Post wasn't found!" });
         }
         const now = new Date();
         const createdAt = now.toISOString();
         const updatedAt = now.toISOString();
-        const createsql = `insert into comments(postID, author,
-        content, createdAt, updatedAt)
+        const createsql = `insert into comments(postID,
+        author, content, createdAt, updatedAt)
         values(?, ?, ?, ?, ?)`;
         const values = [postID, author, content,
             createdAt, updatedAt];
         const [result] = await db.query(createsql, values);
         const createdComment = {
-            id: result.insertId,
-            postID,
-            author,
-            content,
-            createdAt,
-            updatedAt
+            id: result.insertId, postID, author,
+            content, createdAt, updatedAt
         };
         return res.status(201).json(createdComment);
     } catch (err) {
-        console.log(err);
-        return res.status(500).send("Database error!");
+        return handleError(res, err);
     }
 }
 
@@ -95,25 +89,27 @@ export async function changeComment(req, res) {
         const commentID = parseInt(req.params.commentID);
         if (isNaN(postID) || isNaN(commentID)) {
             return res.status(400)
-                .send("Bad request. Invalid ID.");
+                .json({ error: "Bad request. Invalid ID." });
         }
         const { author, content } = req.body;
         if (!author || !content) {
-            return res.status(400)
-                .send("PUT request missing required fields!");
+            return res.status(400).json({
+                error: "PUT request missing required fields!"
+            });
         }
-        const selectsql = `select * from comments
-        where id = ?`;
+        const selectsql = `select * from comments where id = ?`;
         const [selectResult] = await db
             .query(selectsql, [commentID]);
         if (selectResult.length === 0) {
             return res.status(404)
-                .send("Comment wasn't found!");
+                .json({ error: "Comment wasn't found!" });
         }
         const currentComment = selectResult[0];
         if (currentComment.postID !== postID) {
-            return res.status(400).send(
-                "Comment doesn't belong to the specified post!");
+            return res.status(400).json({
+                error:
+                    "Comment doesn't belong to the specified post!"
+            });
         }
         const now = new Date();
         const createdAt = currentComment.createdAt;
@@ -123,17 +119,12 @@ export async function changeComment(req, res) {
         const values = [author, content, updatedAt, commentID];
         await db.query(updatesql, values);
         const updatedComment = {
-            id: commentID,
-            postID,
-            author,
-            content,
-            createdAt,
-            updatedAt
+            id: commentID, postID, author,
+            content, createdAt, updatedAt
         }
         return res.status(200).json(updatedComment);
     } catch (err) {
-        console.log(err);
-        return res.status(500).send("Database error!");
+        return handleError(res, err);
     }
 }
 
@@ -143,24 +134,28 @@ export async function updateComment(req, res) {
         const commentID = parseInt(req.params.commentID);
         if (isNaN(postID) || isNaN(commentID)) {
             return res.status(400)
-                .send("Bad request. Invalid ID.");
+                .json({ error: "Bad request. Invalid ID." });
         }
         const { author, content } = req.body;
         if (author === undefined && content === undefined) {
-            return res.status(400).send(
-                "PATCH request must contain at least one field!");
+            return res.status(400).json({
+                error:
+                    "PATCH request must contain at least one field!"
+            });
         }
         const selectsql = "select * from comments where id = ?";
         const [selectResult] = await db
             .query(selectsql, [commentID]);
         if (selectResult.length === 0) {
             return res.status(404)
-                .send("Comment wasn't found!");
+                .json({ error: "Comment wasn't found!" });
         }
         const currentComment = selectResult[0];
         if (currentComment.postID !== postID) {
-            return res.status(400).send(
-                "Comment doesn't belong to the specified post!");
+            return res.status(400).json({
+                error:
+                    "Comment doesn't belong to the specified post!"
+            });
         }
         const updatedAuthor = author !== undefined ?
             author : currentComment.author;
@@ -173,17 +168,13 @@ export async function updateComment(req, res) {
             updatedAt, commentID];
         await db.query(updatesql, values);
         const updatedComment = {
-            id: commentID,
-            postID,
-            author: updatedAuthor,
-            content: updatedContent,
-            createdAt: currentComment.createdAt,
-            updatedAt
+            id: commentID, postID,
+            author: updatedAuthor, content: updatedContent,
+            createdAt: currentComment.createdAt, updatedAt
         }
         return res.status(200).json(updatedComment);
     } catch (err) {
-        console.log(err);
-        return res.status(500).send("Database error!");
+        return handleError(res, err);
     }
 }
 
@@ -193,24 +184,26 @@ export async function deleteComment(req, res) {
         const commentID = parseInt(req.params.commentID);
         if (isNaN(postID) || isNaN(commentID)) {
             return res.status(400)
-                .send("Bad request. Invalid ID.");
+                .json({ error: "Bad request. Invalid ID." });
         }
         const checksql = `select postID from comments
         where id = ?`;
         const [checkResult] = await db
             .query(checksql, [commentID]);
         if (checkResult.length === 0) {
-            return res.status(404).send("Comment wasn't found!");
+            return res.status(404)
+                .json({ error: "Comment wasn't found!" });
         }
         if (checkResult[0].postID !== postID) {
-            return res.status(400).send(
-                "Comment doesn't belong to the specified post!");
+            return res.status(400).json({
+                error:
+                    "Comment doesn't belong to the specified post!"
+            });
         }
         const deletesql = "delete from comments where id = ?";
         await db.query(deletesql, [commentID]);
         return res.status(204).send();
     } catch (err) {
-        console.log(err);
-        return res.status(500).send("Database error!");
+        return handleError(res, err);
     }
 }

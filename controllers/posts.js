@@ -1,17 +1,18 @@
 import db from '../db.js';
+import { handleError } from '../utils/errorHandler.js';
 
 export async function getPost(req, res) {
     try {
         const id = parseInt(req.params.postID);
         if (isNaN(id)) {
             return res.status(400)
-                .send("Bad request. Invalid ID.");
+                .json({ error: "Bad request. Invalid ID." });
         }
         const sql = "select * from posts where id = ?";
         const [result] = await db.query(sql, [id]);
         if (result.length === 0) {
             return res.status(404)
-                .send("Post wasn't found!");
+                .json({ error: "Post wasn't found!" });
         }
         const formatted = result.map(post => ({
             ...post,
@@ -19,9 +20,7 @@ export async function getPost(req, res) {
         }));
         return res.status(200).json(formatted);
     } catch (err) {
-        console.log(err);
-        return res.status(500)
-            .send("Error retrieving post!");
+        handleError(res, err);
     }
 }
 
@@ -33,12 +32,9 @@ export async function getPosts(req, res) {
             ...post,
             tags: post.tags ? post.tags.split(',') : []
         }))
-        return res.status(200)
-            .json(formatted);
+        return res.status(200).json(formatted);
     } catch (err) {
-        console.log(err);
-        return res.status(500)
-            .send("Error retrieving posts.");
+        handleError(res, err);
     }
 }
 
@@ -58,8 +54,7 @@ export async function getPostsTerm(req, res) {
         }));
         return res.status(200).json(formatted);
     } catch (err) {
-        console.log(err);
-        return res.status(500).send("Database error!");
+        handleError(res, err);
     }
 }
 
@@ -68,32 +63,24 @@ export async function createPost(req, res) {
         const { title, content, category, tags } = req.body;
         if (!title || !content
             || !category || !Array.isArray(tags)) {
-            return res.status(400)
-                .send("Missing fields or invalid format!");
+            return res.status(400).json(
+                { error: "Missing fields or invalid format!" });
         }
-        const now = new Date();
-        const createdAt = now.toISOString();
-        const updatedAt = now.toISOString();
+        const now = new Date().toISOString();
         const tagString = tags.join(',');
         const createsql = `insert into posts(title, content,
         category, tags, createdAt, updatedAt) 
         values (?, ?, ?, ?, ?, ?)`;
         const values = [title, content, category,
-            tagString, createdAt, updatedAt];
+            tagString, now, now];
         const [result] = await db.query(createsql, values);
         const createdPost = {
-            id: result.insertId,
-            title,
-            content,
-            category,
-            tags,
-            createdAt,
-            updatedAt
+            id: result.insertId, title, content,
+            category, tags, createdAt, updatedAt
         };
         return res.status(201).json(createdPost);
     } catch (err) {
-        console.log(err);
-        return res.status(500).send("Database error!");
+        handleError(res, err);
     }
 }
 
@@ -102,18 +89,19 @@ export async function changePost(req, res) {
         const id = parseInt(req.params.postID);
         if (isNaN(id)) {
             return res.status(400)
-                .send("Bad request. Invalid ID.");
+                .json({ error: "Bad request. Invalid ID." });
         }
         const { title, content, category, tags } = req.body;
         if (!title || !content
             || !category || !Array.isArray(tags)) {
-            return res.status(400)
-                .send("PUT request missing required fields!");
+            return res.status(400).json(
+                { error: "PUT request missing required fields!" });
         }
         const selectsql = "select * from posts where id = ?";
         const [selectResult] = await db.query(selectsql, [id]);
         if (selectResult.length === 0) {
-            return res.status(404).send("Post wasn't found!");
+            return res.status(404)
+                .json({ error: "Post wasn't found!" });
         }
         const now = new Date();
         const createdAt = selectResult[0].createdAt;
@@ -126,18 +114,12 @@ export async function changePost(req, res) {
             tagString, updatedAt, id];
         await db.query(updatesql, values);
         const updatedPost = {
-            id: id,
-            title,
-            content,
-            category,
-            tags,
-            createdAt,
-            updatedAt
+            id: id, title, content, category,
+            tags, createdAt, updatedAt
         }
         return res.status(200).json(updatedPost);
     } catch (err) {
-        console.log(err);
-        return res.status(500).send("Database error!");
+        handleError(res, err);
     }
 }
 
@@ -146,14 +128,14 @@ export async function updatePost(req, res) {
         const id = parseInt(req.params.postID);
         if (isNaN(id)) {
             return res.status(400)
-                .send("Bad request. Invalid ID.");
+                .json({ error: "Bad request. Invalid ID." });
         }
         let { title, content, category, tags } = req.body;
         const selectsql = "select * from posts where id = ?";
         const [selectResult] = await db.query(selectsql, [id]);
         if (selectResult.length === 0) {
             return res.status(404)
-                .send("Post wasn't found!");
+                .json({ error: "Post wasn't found!" });
         }
         const initPost = selectResult[0];
         const updatedTitle = title !== undefined ?
@@ -172,18 +154,14 @@ export async function updatePost(req, res) {
             updatedCategory, updatedTags, updatedAt, id];
         await db.query(updatesql, values);
         const updatedPost = {
-            id,
-            title: updatedTitle,
-            content: updatedContent,
+            id, title: updatedTitle, content: updatedContent,
             category: updatedCategory,
             tags: tags || initPost.tags.split(','),
-            createdAt: initPost.createdAt,
-            updatedAt
+            createdAt: initPost.createdAt, updatedAt
         };
         return res.status(200).json(updatedPost);
     } catch (err) {
-        console.log(err);
-        return res.status(500).send("Database error!");
+        handleError(res, err);
     }
 }
 
@@ -192,18 +170,18 @@ export async function deletePost(req, res) {
         const id = req.params.postID;
         if (isNaN(id)) {
             return res.status(400)
-                .send("Bad request. Invalid ID.");
+                .json({ error: "Bad request. Invalid ID." });
         }
         const checksql = "select 1 from posts where id = ?";
         const [result] = await db.query(checksql, [id]);
         if (result.length === 0) {
-            return res.status(404).send("Post wasn't found!");
+            return res.status(404)
+                .json({ error: "Post wasn't found!" });
         }
         const deletesql = "delete from posts where id = ?";
         await db.query(deletesql, [id]);
         return res.status(204).send();
     } catch (err) {
-        console.log(err);
-        return res.status(500).send("Database error!");
+        handleError(res, err);
     }
 }
