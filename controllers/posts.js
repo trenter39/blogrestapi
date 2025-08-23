@@ -1,23 +1,20 @@
 import db from '../db.js';
-import { handleError } from '../utils/errorHandler.js';
+import {
+    handleError, validateID,
+    formatTags, badRequest
+} from '../utils/APIHelper.js';
 
 export async function getPost(req, res) {
     try {
-        const id = parseInt(req.params.postID);
-        if (isNaN(id)) {
-            return res.status(400)
-                .json({ error: "Bad request. Invalid ID." });
-        }
+        const id = validateID(req.params.postID);
+        if (!id) return badRequest(res);
         const sql = "select * from posts where id = ?";
         const [result] = await db.query(sql, [id]);
         if (result.length === 0) {
             return res.status(404)
                 .json({ error: "Post wasn't found!" });
         }
-        const formatted = result.map(post => ({
-            ...post,
-            tags: post.tags ? post.tags.split(',') : []
-        }));
+        const formatted = formatTags(result);
         return res.status(200).json(formatted);
     } catch (err) {
         handleError(res, err);
@@ -28,10 +25,10 @@ export async function getPosts(req, res) {
     try {
         const sql = "select * from posts";
         const [result] = await db.query(sql);
-        const formatted = result.map(post => ({
-            ...post,
-            tags: post.tags ? post.tags.split(',') : []
-        }))
+        if (result.length === 0) {
+            return res.status(200).json([]);
+        }
+        const formatted = formatTags(result);
         return res.status(200).json(formatted);
     } catch (err) {
         handleError(res, err);
@@ -48,10 +45,7 @@ export async function getPostsTerm(req, res) {
         const values = [likeTerm, likeTerm,
             likeTerm, likeTerm];
         const [result] = await db.query(sql, values);
-        const formatted = result.map(post => ({
-            ...post,
-            tags: post.tags ? post.tags.split(',') : []
-        }));
+        const formatted = formatTags(result);
         return res.status(200).json(formatted);
     } catch (err) {
         handleError(res, err);
@@ -61,8 +55,8 @@ export async function getPostsTerm(req, res) {
 export async function createPost(req, res) {
     try {
         const { title, content, category, tags } = req.body;
-        if (!title || !content
-            || !category || !Array.isArray(tags)) {
+        if (!title || !content || !category
+            || !Array.isArray(tags)) {
             return res.status(400).json(
                 { error: "Missing fields or invalid format!" });
         }
@@ -76,7 +70,7 @@ export async function createPost(req, res) {
         const [result] = await db.query(createsql, values);
         const createdPost = {
             id: result.insertId, title, content,
-            category, tags, createdAt, updatedAt
+            category, tags, createdAt: now, updatedAt: now
         };
         return res.status(201).json(createdPost);
     } catch (err) {
@@ -86,14 +80,11 @@ export async function createPost(req, res) {
 
 export async function changePost(req, res) {
     try {
-        const id = parseInt(req.params.postID);
-        if (isNaN(id)) {
-            return res.status(400)
-                .json({ error: "Bad request. Invalid ID." });
-        }
+        const id = validateID(req.params.postID);
+        if (!id) return badRequest(res);
         const { title, content, category, tags } = req.body;
-        if (!title || !content
-            || !category || !Array.isArray(tags)) {
+        if (!title || !content || !category
+            || !Array.isArray(tags)) {
             return res.status(400).json(
                 { error: "PUT request missing required fields!" });
         }
@@ -103,9 +94,8 @@ export async function changePost(req, res) {
             return res.status(404)
                 .json({ error: "Post wasn't found!" });
         }
-        const now = new Date();
         const createdAt = selectResult[0].createdAt;
-        const updatedAt = now.toISOString();
+        const updatedAt = new Date().toISOString();
         const tagString = tags.join(',');
         const updatesql = `update posts set title = ?,
         content = ?, category = ?, tags = ?,
@@ -125,11 +115,8 @@ export async function changePost(req, res) {
 
 export async function updatePost(req, res) {
     try {
-        const id = parseInt(req.params.postID);
-        if (isNaN(id)) {
-            return res.status(400)
-                .json({ error: "Bad request. Invalid ID." });
-        }
+        const id = validateID(req.params.postID);
+        if (!id) return badRequest(res);
         let { title, content, category, tags } = req.body;
         const selectsql = "select * from posts where id = ?";
         const [selectResult] = await db.query(selectsql, [id]);
@@ -138,14 +125,10 @@ export async function updatePost(req, res) {
                 .json({ error: "Post wasn't found!" });
         }
         const initPost = selectResult[0];
-        const updatedTitle = title !== undefined ?
-            title : initPost.title;
-        const updatedContent = content !== undefined ?
-            content : initPost.content;
-        const updatedCategory = category !== undefined ?
-            category : initPost.category;
-        const updatedTags = tags !== undefined ?
-            tags.join(',') : initPost.tags;
+        const updatedTitle = title ?? initPost.title;
+        const updatedContent = content ?? initPost.content;
+        const updatedCategory = category ?? initPost.category;
+        const updatedTags = tags?.join(',') ?? initPost.tags;
         const updatedAt = new Date().toISOString();
         const updatesql = `update posts set title = ?,
         content = ?, category = ?, tags = ?,
@@ -167,11 +150,8 @@ export async function updatePost(req, res) {
 
 export async function deletePost(req, res) {
     try {
-        const id = req.params.postID;
-        if (isNaN(id)) {
-            return res.status(400)
-                .json({ error: "Bad request. Invalid ID." });
-        }
+        const id = validateID(req.params.postID);
+        if (!id) return badRequest(res);
         const checksql = "select 1 from posts where id = ?";
         const [result] = await db.query(checksql, [id]);
         if (result.length === 0) {

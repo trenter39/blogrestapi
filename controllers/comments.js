@@ -1,14 +1,12 @@
 import db from '../db.js';
-import { handleError } from '../utils/errorHandler.js';
+import { handleError, validateID, badRequest }
+    from '../utils/APIHelper.js';
 
 export async function getComment(req, res) {
     try {
-        const postID = parseInt(req.params.postID);
-        const commentID = parseInt(req.params.commentID);
-        if (isNaN(postID) || isNaN(commentID)) {
-            return res.status(400)
-                .json({ error: "Bad request. Invalid ID." });
-        }
+        const postID = validateID(req.params.postID);
+        const commentID = validateID(req.params.commentID);
+        if (!postID || !commentID) return badRequest(res);
         const sql = `select * from comments
         where postID = ? and id = ?`;
         const [result] = await db
@@ -25,11 +23,8 @@ export async function getComment(req, res) {
 
 export async function getComments(req, res) {
     try {
-        const postID = parseInt(req.params.postID);
-        if (isNaN(postID)) {
-            return res.status(400)
-                .json({ error: "Bad request. Invalid ID." });
-        }
+        const postID = validateID(req.params.postID);
+        if (!postID) return badRequest(res);
         const sql = `select * from comments
         where postID = ?`;
         const [result] = await db.query(sql, [postID]);
@@ -46,11 +41,8 @@ export async function getComments(req, res) {
 
 export async function createComment(req, res) {
     try {
-        const postID = parseInt(req.params.postID);
-        if (isNaN(postID)) {
-            return res.status(400)
-                .json({ error: "Bad request. Invalid ID." });
-        }
+        const postID = validateID(req.params.postID);
+        if (!postID) return badRequest(res);
         const { author, content } = req.body;
         if (!author || !content) {
             return res.status(400).json(
@@ -64,18 +56,15 @@ export async function createComment(req, res) {
             return res.status(404)
                 .json({ error: "Post wasn't found!" });
         }
-        const now = new Date();
-        const createdAt = now.toISOString();
-        const updatedAt = now.toISOString();
+        const now = new Date().toISOString();
         const createsql = `insert into comments(postID,
         author, content, createdAt, updatedAt)
         values(?, ?, ?, ?, ?)`;
-        const values = [postID, author, content,
-            createdAt, updatedAt];
+        const values = [postID, author, content, now, now];
         const [result] = await db.query(createsql, values);
         const createdComment = {
             id: result.insertId, postID, author,
-            content, createdAt, updatedAt
+            content, createdAt: now, updatedAt: now
         };
         return res.status(201).json(createdComment);
     } catch (err) {
@@ -85,12 +74,9 @@ export async function createComment(req, res) {
 
 export async function changeComment(req, res) {
     try {
-        const postID = parseInt(req.params.postID);
-        const commentID = parseInt(req.params.commentID);
-        if (isNaN(postID) || isNaN(commentID)) {
-            return res.status(400)
-                .json({ error: "Bad request. Invalid ID." });
-        }
+        const postID = validateID(req.params.postID);
+        const commentID = validateID(req.params.commentID);
+        if (!postID || !commentID) return badRequest(res);
         const { author, content } = req.body;
         if (!author || !content) {
             return res.status(400).json({
@@ -130,14 +116,11 @@ export async function changeComment(req, res) {
 
 export async function updateComment(req, res) {
     try {
-        const postID = parseInt(req.params.postID);
-        const commentID = parseInt(req.params.commentID);
-        if (isNaN(postID) || isNaN(commentID)) {
-            return res.status(400)
-                .json({ error: "Bad request. Invalid ID." });
-        }
+        const postID = validateID(req.params.postID);
+        const commentID = validateID(req.params.commentID);
+        if (!postID || !commentID) return badRequest(res);
         const { author, content } = req.body;
-        if (author === undefined && content === undefined) {
+        if (author == null && content == null) {
             return res.status(400).json({
                 error:
                     "PATCH request must contain at least one field!"
@@ -157,10 +140,8 @@ export async function updateComment(req, res) {
                     "Comment doesn't belong to the specified post!"
             });
         }
-        const updatedAuthor = author !== undefined ?
-            author : currentComment.author;
-        const updatedContent = content !== undefined ?
-            content : currentComment.content;
+        const updatedAuthor = author ?? currentComment.author;
+        const updatedContent = content ?? currentComment.content;
         const updatedAt = new Date().toISOString();
         const updatesql = `update comments set author = ?,
         content = ?, updatedAt = ? where id = ?`;
@@ -180,12 +161,9 @@ export async function updateComment(req, res) {
 
 export async function deleteComment(req, res) {
     try {
-        const postID = parseInt(req.params.postID);
-        const commentID = parseInt(req.params.commentID);
-        if (isNaN(postID) || isNaN(commentID)) {
-            return res.status(400)
-                .json({ error: "Bad request. Invalid ID." });
-        }
+        const postID = validateID(req.params.postID);
+        const commentID = validateID(req.params.commentID);
+        if (!postID || !commentID) return badRequest(res);
         const checksql = `select postID from comments
         where id = ?`;
         const [checkResult] = await db

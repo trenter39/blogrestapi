@@ -1,6 +1,7 @@
 import db from '../db.js';
 import bcrypt from 'bcrypt';
-import { handleError } from '../utils/errorHandler.js';
+import { handleError }
+    from '../utils/APIHelper.js';
 
 export async function getUser(req, res) {
     try {
@@ -72,14 +73,23 @@ export async function changeUser(req, res) {
             return res.status(400).json(
                 { error: "PUT request missing required fields!" });
         }
+        const checksql = `select 1 from users
+        where username = ? or email = ?`;
+        const [checkResult] = await db
+            .query(checksql, [username, email]);
+        if (checkResult.length > 0) {
+            return res.status(409).json(
+                { error: "Username or email is already in use!" });
+        }
         const selectsql = `select * from users
-            where username = ?`;
+        where username = ?`;
         const [selectResult] = await db
             .query(selectsql, [defaultUsername]);
         if (selectResult.length === 0) {
             return res.status(404)
                 .json({ error: "User wasn't found!" });
         }
+        const currentUser = selectResult[0];
         const hashedPassword = await bcrypt.hash(password, 10);
         const updatedAt = new Date().toISOString();
         const updatesql = `update users set username = ?,
@@ -89,7 +99,8 @@ export async function changeUser(req, res) {
             updatedAt, defaultUsername];
         await db.query(updatesql, values);
         const updatedUser = {
-            id: selectResult.id, username, email, updatedAt
+            id: currentUser.id, username, email,
+            createdAt: currentUser.createdAt, updatedAt
         };
         return res.status(200).json(updatedUser);
     } catch (err) {
@@ -101,9 +112,12 @@ export async function updateUser(req, res) {
     try {
         const defaultUsername = req.params.username;
         const { username, email, password } = req.body;
-        if (!username && !email && !password) {
-            return res.status(400).json(
-                { error: "No fields provided for update!" });
+        if (username == null && email == null
+            && password == null) {
+            return res.status(400).json({
+                error:
+                    "PATCH request must contain at least one field!"
+            });
         }
         const selectsql = `select 1 from users
         where username = ?`;
@@ -113,6 +127,7 @@ export async function updateUser(req, res) {
             return res.status(404).json(
                 { error: "User wasn't found!" });
         }
+        const currentUser = selectResult[0];
         const fields = [];
         const values = [];
         if (username) {
@@ -137,9 +152,10 @@ export async function updateUser(req, res) {
         ${fields.join(", ")} where username = ?`;
         await db.query(updatesql, values);
         const updatedUser = {
+            id: currentUser.id,
             username: username ?? defaultUsername,
-            email: email ?? selectResult[0].email,
-            createdAt: selectResult[0].createdAt,
+            email: email ?? currentUser.email,
+            createdAt: currentUser.createdAt,
             updatedAt
         }
         return res.status(200).json(updatedUser)
