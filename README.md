@@ -32,15 +32,6 @@ create table comments (
     updatedAt DATETIME not null default current_timestamp on update current_timestamp,
     foreign key (postID) references posts(id) on delete cascade
 );
-
-create table users (
-    id int primary key auto_increment,
-    username varchar(50) not null unique,
-    email varchar(100) not null unique,
-    password varchar(255) not null,
-    createdAt datetime not null default current_timestamp,
-    updatedAt datetime not null default current_timestamp on update current_timestamp
-)
 ```
 or you can run the schema file to set up the database:
 ```
